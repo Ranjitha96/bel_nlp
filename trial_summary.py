@@ -2,42 +2,36 @@
 from __future__ import division
 import nltk
 import re,os
-from nltk import word_tokenize,pos_tag
-from bs4 import BeautifulSoup
-from sklearn.feature_extraction.text import CountVectorizer
+import glob
+import random
 from sklearn.feature_extraction.text import TfidfTransformer
-import urllib
-from nltk.corpus import stopwords
-import pandas as pd
-stop=stopwords.words('english')
-NOUNS = ['NN', 'NNS', 'NNP', 'NNPS']
+from sklearn.feature_extraction.text import CountVectorizer
 
-class document:
-	path=""
-	content=""
-	def __init__(self,pname):
-		self.path=pname
+path="/home/pannaga/bel_project/500N-KPCrowd-v1/CorpusAndCrowdsourcingAnnotations/train/"
+key_files=glob.glob(path+'*.key')
+shuffled_candidate_key_files=glob.glob(path+'*-Shuffled')
 
-	def read_content(self):
-		fh=open(self.path,'r')
-		self.content=fh.read()
-		return self.content
-
-	
-
-
-
-if __name__ == '__main__':
-	path_liist=['/home/pannaga/bel project/corpus/dataset2/insidious1.txt','/home/pannaga/bel project/corpus/dataset2/insidious2.txt','/home/pannaga/bel project/corpus/dataset2/insidious3.txt','/home/pannaga/bel project/corpus/dataset2/insidious4.txt']
-	docs=[document(pathname) for i in range(0,4) for pathname in path_liist]
-	contents=[doc.read_content() for doc in docs]
-	count_vect=CountVectorizer(stop_words='english')					#Convert a collection of text documents to a matrix of token counts
-	train_vect=count_vect.fit_transform(contents)						#Learn a vocabulary dictionary of all tokens in the raw documents.
-	train_vect_df=pd.DataFrame(train_vect.toarray(),columns=count_vect.get_feature_names())	#converting the document-term matrix into a dataframe
-	print train_vect_df
-	"""tfidf=TfidfTransformer(norm="l2")	#Transform a count matrix to a normalized tf or tf-idf representation
-	train_tfidf=tfidf.fit_transform(train_vect)"""
-	
-
-
-
+training_candidate_words=[]
+for file1 in key_files:
+	file2=file1.split('.')[0]+'-Shuffled'
+	lines=[]
+	with open(file1,'r') as f1:
+		for line in f1:
+			lines.append(line.strip())
+	count=len(lines)
+	c=0
+	with open(file2,'r') as f2:
+		for line in f2:
+			l=line.split('\t')[0]
+			if((l not in lines) and (c<count)):
+				lines.append(l)
+				c+=1
+	training_candidate_words.append(lines)
+training_candidate_words=sum(training_candidate_words,[])
+count_vectorizer=CountVectorizer()
+freq_term_mat=count_vectorizer.fit_transform(training_candidate_words)
+print len(count_vectorizer.vocabulary_)
+tfidf_vectorizer=TfidfTransformer()
+tfidf_mat=tfidf_vectorizer.fit_transform(freq_term_mat)
+idf=tfidf_vectorizer.idf_
+print len(dict(zip(count_vectorizer.get_feature_names(), idf)))
