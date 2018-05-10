@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import division
 import csv
-import numpy as np
 import nltk
 import re,os,math
 import glob
@@ -24,8 +23,6 @@ nounphrases=[]
 trigrams=[]
 named_entities=[]
 file_head=[]
-tokens = []
-rootwords=[]
 for file1 in key_files:
 	file_head.append(file1.split('.')[0])
 	file2=file1.split('.')[0]+'-Shuffled'
@@ -48,77 +45,13 @@ for file1 in key_files:
 				c+=1
 	training_candidate_words.append(lines)
 	keywords.append(keyword)
+	token = []
 	text_file=file1.split('.')[0]+'.txt'
 	with open(text_file,'r') as f:
 		t=f.read()
 		t=re.sub(r'\n',' ',t)
 		t=re.sub(r'[^a-zA-Z0-9\' ]*','',t)
 		token=nltk.word_tokenize(t)
-		ps = PorterStemmer()
-        tags = nltk.pos_tag(token)
-        filtered_wordsToTags = {w: s for w, s in tags if w not in stopword and s in REQ}
-        stemmedToWords = {ps.stem(w): w for w in filtered_wordsToTags.keys()}
-        synonymToStemmedWord = {}
-        relatedWordSet = {}
-        freq_count = {word: tf(word, token) for word in token}
-        freq_score = {word: score(word, token) for word in token}
-
-        posString = ''
-        for word,tag in tags:
-            if tag in posToWN.keys():
-                posString += posToWN[tag]
-            else:
-                posString += '.'
-        j=[]
-        i = posString.find('n')
-        j.append(i)
-        str =""
-        ind = []
-        nouns = [""]
-        while i < len(posString) and i != -1:
-            if j[-1] == i - 1:
-                nouns[-1] = " ".join(ind)
-                relatedWordSet[token[i]] = [token[j[-1]]]
-            else:
-                nouns[-1] = " ".join(ind)
-                str = ""
-                ind =[]
-                j=[]
-                nouns.append("")
-            j.append(i)
-            ind.append(token[i])
-            i = posString.find('n',i + 1)
-        nouns.append(" ".join(ind))
-        nouns = [x for x in nouns if x!='']
-
-        for word in stemmedToWords.keys():
-            if filtered_wordsToTags[stemmedToWords[word]] not in PRONOUNS:
-                synset = wn.synsets(word, pos=posToWN[filtered_wordsToTags[stemmedToWords[word]]])
-                flag = False
-                for entry in synset:
-                    for synonym in entry.lemma_names():
-                        if synonym not in synonymToStemmedWord:
-                            synonymToStemmedWord[synonym] = word
-                            if word not in relatedWordSet:
-                                relatedWordSet[word] = []
-                        else:
-                            if synonymToStemmedWord[synonym] != word:
-                                relatedWordSet[synonymToStemmedWord[synonym]].append(word)
-                            flag = True
-                            break
-                    if flag:
-                        break
-                        
-        rootWordFrequency = {}
-        rootWordWeight = {}
-
-        for root, list in relatedWordSet.iteritems():
-            rootWordFrequency[root] = freq_count[stemmedToWords.get(root,root)]
-            rootWordWeight[root] = freq_score[stemmedToWords.get(root,root)]
-            for word in list:
-                rootWordFrequency[root] += freq_count[stemmedToWords.get(word,word)]
-                rootWordWeight[root] += freq_score[stemmedToWords.get(word,word)]
-        rootwords.append(rootWordWeight)
 		tri=ngrams(token,3)
 		trigram=[]
 		for i in tri:
@@ -136,7 +69,6 @@ for file1 in key_files:
 		for np in doc.noun_chunks:
 			nounph.append(np.text)
 		nounphrases.append(' '.join(nounph))
-		tokens.append(token)
 		f.close()
 	text.append(t)
 
@@ -157,15 +89,13 @@ def idf(word,words_lists):
 	return math.log(len(words_lists)/(1+n_containing(word,words_lists)))
 
 def score(word, word_list):
-	word = nltk.word_tokenize(word)
-	value = []
-	val=0
-	for w in word:
-		for i, j in enumerate(word_list):
-			if j == w:
-				val += float(1 - (i / float(len(word_list))))
-		value.append(val)
-	return sum(value)/len(value)
+	
+    value = 0.0
+    for i, j in enumerate(word_list):
+        if j == word:
+            value += float(1 - (i / float(len(word_list))))
+    return value
+
 def capitalize(phrase):
 	values={}
 	reg1=r'[A-Z][a-z]+[A-Z][a-z]*'
@@ -256,13 +186,13 @@ fea=open('features.csv','w')
 file_names=open('feature_data.csv','w')
 fea_writer = csv.writer(fea)
 name_writer = csv.writer(file_names)
-fea_writer.writerow(["term_frequency","tfidf","capitalize","named entity","noun phrases","trigrams","Score"])
+fea_writer.writerow(["term_frequency","tfidf","capitalize"])
 name_writer.writerow(["word","keyword_or_not"]) 
 for i,file in enumerate(file_head):
 	print(file)
 	# file_names.write(file+' '+str(counter+1)+' '+str(len(training_candidate_words[i])+counter+1 )+ '\n')
 	for w in training_candidate_words[i]:
-		fea_writer.writerow([tf(w,tokens[i]),tfidf(w,tokens,tokens[i]),capitalize(w),named_entity(w,i),noun_phrases(w,i),trigrams_tag(w,i),score(w,tokens[i]),root_word_score(w,i)])
+		fea_writer.writerow([text[i].count(w),tfidf(w,text,text[i]),capitalize(w)])
 		# print keywords[i]
 		name_writer.writerow([w, keyword_or_not(w,i)])
 
