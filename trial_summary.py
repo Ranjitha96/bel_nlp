@@ -6,12 +6,35 @@ import nltk
 import re,os,math
 import glob
 import random,spacy
+from nltk.stem import PorterStemmer
+from nltk.corpus import stopwords
 from nltk.util import ngrams
-from collections import OrderedDict
+from nltk.corpus import wordnet as wn
 from sklearn.feature_extraction.text import TfidfTransformer,TfidfVectorizer
 from sklearn.feature_extraction.text import CountVectorizer
 
 nlp=spacy.load('en_core_web_sm')
+stopword = stopwords.words('english')
+NOUNS = ['NN', 'NNS', 'NNP', 'NNPS']
+VERBS = ['VB', 'VBG', 'VBD', 'VBN', 'VBP', 'VBZ']
+PRONOUNS = ['PRP', 'PRP$', 'WP', 'WP$']
+REQ = NOUNS + VERBS + PRONOUNS
+
+posToWN = {}
+for noun in NOUNS:
+    posToWN[noun] = wn.NOUN
+for verb in VERBS:
+    posToWN[verb] = wn.VERB
+
+def tf(word,word_list):
+	return word_list.count(word)/len(word_list)
+
+def score(word, word_list):
+    value = 0.0
+    for i, j in enumerate(word_list):
+        if j == word:
+            value += float(1 - (i / float(len(word_list))))
+    return value
 
 path="/home/pannaga/bel_project/500N-KPCrowd-v1/CorpusAndCrowdsourcingAnnotations/train/"
 key_files=glob.glob(path+'*.key')
@@ -26,6 +49,8 @@ named_entities=[]
 file_head=[]
 tokens = []
 rootwords=[]
+relatedWords=[]
+ps = PorterStemmer()
 for file1 in key_files:
 	file_head.append(file1.split('.')[0])
 	file2=file1.split('.')[0]+'-Shuffled'
@@ -54,7 +79,6 @@ for file1 in key_files:
 		t=re.sub(r'\n',' ',t)
 		t=re.sub(r'[^a-zA-Z0-9\' ]*','',t)
 		token=nltk.word_tokenize(t)
-		ps = PorterStemmer()
         tags = nltk.pos_tag(token)
         filtered_wordsToTags = {w: s for w, s in tags if w not in stopword and s in REQ}
         stemmedToWords = {ps.stem(w): w for w in filtered_wordsToTags.keys()}
@@ -72,7 +96,7 @@ for file1 in key_files:
         j=[]
         i = posString.find('n')
         j.append(i)
-        str =""
+        str1 =""
         ind = []
         nouns = [""]
         while i < len(posString) and i != -1:
@@ -81,7 +105,7 @@ for file1 in key_files:
                 relatedWordSet[token[i]] = [token[j[-1]]]
             else:
                 nouns[-1] = " ".join(ind)
-                str = ""
+                str1 = ""
                 ind =[]
                 j=[]
                 nouns.append("")
@@ -108,17 +132,17 @@ for file1 in key_files:
                             break
                     if flag:
                         break
-                        
+        relatedWords.append(relatedWordSet)
         rootWordFrequency = {}
         rootWordWeight = {}
 
-        for root, list in relatedWordSet.iteritems():
+        for root, list1 in relatedWordSet.iteritems():
             rootWordFrequency[root] = freq_count[stemmedToWords.get(root,root)]
             rootWordWeight[root] = freq_score[stemmedToWords.get(root,root)]
-            for word in list:
+            for word in list1:
                 rootWordFrequency[root] += freq_count[stemmedToWords.get(word,word)]
                 rootWordWeight[root] += freq_score[stemmedToWords.get(word,word)]
-        rootwords.append(rootWordWeight)
+		rootwords.append(rootWordWeight)
 		tri=ngrams(token,3)
 		trigram=[]
 		for i in tri:
@@ -145,8 +169,6 @@ def tfidf(word,words_list1,word_list):
 	return tf(word,word_list)*idf(word,words_list1)
 
 '''computes "term frequency" which is the number of times a word appears in a document(here we have considered stemmed words of the document), normalized by dividing by the total number of words in document.'''
-def tf(word,word_list):
-	return word_list.count(word)/len(word_list)
 
 '''returns the number of documents containing word'''
 def n_containing(word,words_lists):
@@ -156,7 +178,7 @@ def n_containing(word,words_lists):
 def idf(word,words_lists):
 	return math.log(len(words_lists)/(1+n_containing(word,words_lists)))
 
-def score(word, word_list):
+def score1(word, word_list):
 	word = nltk.word_tokenize(word)
 	value = []
 	val=0
@@ -167,7 +189,7 @@ def score(word, word_list):
 		value.append(val)
 	return sum(value)/len(value)
 def capitalize(phrase):
-	values={}
+	valu={}
 	reg1=r'[A-Z][a-z]+[A-Z][a-z]*'
 	reg2=r'[A-Z][a-z]+'
 	reg3=r'^[A-Z]{2,}[a-z]+'
@@ -178,15 +200,15 @@ def capitalize(phrase):
 		for wo in wor:
 			if wo.isalpha():
 				if wo.islower():
-					values[wo]=1
+					valu[wo]=1
 				elif re.match(reg1,wo) or re.match(reg3,wo) or re.match(reg4,wo):
-					values[wo]=2
+					valu[wo]=2
 				elif  wo.isupper():
-					values[wo]=3
+					valu[wo]=3
 				else:
 					if re.match(reg2,wo):
-						values[wo]=4
-				tot+=values[wo]
+						valu[wo]=4
+				tot+=valu[wo]
 		return tot/len(wor)
 	else:
 		return 0
@@ -209,7 +231,15 @@ def first_occur(phrase,j):
 		return None
 	return location
 
-def difference_between_occurences(phrase,j):
+def root_word_score(phrase,j):
+	num_words=phrase.split()
+	for k in num_words:
+		stem_k=ps.stem(k)
+		for ph,list1 in relatedWords[j].iteritems():
+			if stem_k in list1:
+				key_val=ph
+	return relatedWords[j][key_val]
+'''def difference_between_occurences(phrase,j):
 	#print phrase
 	list1=[]
 	index=0
@@ -232,7 +262,7 @@ def difference_between_occurences(phrase,j):
 				print avg
 		prev = pos
 		# print avg
-	return avg
+	return avg'''
 
 def named_entity(phrase,j):
 	num_words=phrase.split()
@@ -262,7 +292,7 @@ for i,file in enumerate(file_head):
 	print(file)
 	# file_names.write(file+' '+str(counter+1)+' '+str(len(training_candidate_words[i])+counter+1 )+ '\n')
 	for w in training_candidate_words[i]:
-		fea_writer.writerow([tf(w,tokens[i]),tfidf(w,tokens,tokens[i]),capitalize(w),named_entity(w,i),noun_phrases(w,i),trigrams_tag(w,i),score(w,tokens[i]),root_word_score(w,i)])
+		fea_writer.writerow([tf(w,tokens[i]),tfidf(w,tokens,tokens[i]),capitalize(w),named_entity(w,i),noun_phrases(w,i),trigrams_tag(w,i),score1(w,tokens[i]),root_word_score(w,i)])
 		# print keywords[i]
 		name_writer.writerow([w, keyword_or_not(w,i)])
 
